@@ -46,7 +46,7 @@ class Point {
 
   static newRandom() {
     const randRange = (low, hi) =>
-        low + Math.floor((Math.random() * (hi - low)));
+      low + Math.floor((Math.random() * (hi - low)));
     return new Point(randRange(1, WIDTH), randRange(1, HEIGHT));
   }
 
@@ -61,11 +61,11 @@ class Point {
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(
-        this.x * SCALE,
-        this.y * SCALE,
-        SCALE / 2,
-        0,
-        Math.PI * 2,
+      this.x * SCALE,
+      this.y * SCALE,
+      SCALE / 2,
+      0,
+      Math.PI * 2,
     );
     ctx.fill();
   }
@@ -88,7 +88,10 @@ class Pellet {
   /** Make a new pellet at a random location and return it. */
 
   static newRandom() {
-    const pt = Point.newRandom();
+    let pt = Point.newRandom();
+    while (game.snake.parts.some(me => me.x === pt.x && me.y === pt.y)) {
+      pt = Point.newRandom();
+    }
     return new Pellet(pt.x, pt.y);
   }
 
@@ -111,20 +114,21 @@ class Pellet {
  **/
 
 class Snake {
-  constructor(keymap, start, dir) {
+  constructor(keymap, start, dir, color) {
     this.keymap = keymap;
     this.parts = [start]; // list of Points in snake body
     this.dir = dir;       // direction currently moving
     this.nextDir = dir;   // direction we'll start moving on next tick
     this.growBy = 0; // how many to grow by (goes up after eating)
-    this.crashIntoSelf= false;
+    this.crashIntoSelf = false;
+    this.color = color;
     //this.checkCrashIntoSelf=this.checkCrashIntoSelf.bind(this);
   }
 
   /** Draw the body of the snake in its color. */
 
   draw() {
-    for (const p of this.parts) p.draw("orange");
+    for (const p of this.parts) p.draw(this.color);
   }
 
   /** Does the snake body contain this Point? t/f */
@@ -156,18 +160,18 @@ class Snake {
     // Calculate where the new head will be, and add that point to front of body
     let pt;
     // prevent 180 turn 
-    if ( (this.nextDir==="right" && this.dir==="left") || 
-        (this.nextDir==="left" && this.dir==="right")  ||
-        (this.nextDir==="up" && this.dir==="down")  ||
-        (this.nextDir==="down" && this.dir==="up")) {return};
+    if ((this.nextDir === "right" && this.dir === "left") ||
+      (this.nextDir === "left" && this.dir === "right") ||
+      (this.nextDir === "up" && this.dir === "down") ||
+      (this.nextDir === "down" && this.dir === "up")) { this.nextDir = this.dir };
     this.dir = this.nextDir;
     if (this.dir === "left") pt = new Point(x - 1, y);
     if (this.dir === "right") pt = new Point(x + 1, y);
     if (this.dir === "up") pt = new Point(x, y - 1);
     if (this.dir === "down") pt = new Point(x, y + 1);
 
-    if (this.contains(pt) ) {game.tick(true)};
-    
+    if (this.contains(pt)) { game.tick(true) };
+
     this.parts.unshift(pt);
 
     // If we're not growing (didn't recently eat a pellet), remove the tail of
@@ -190,7 +194,7 @@ class Snake {
    */
 
   changeDir(dir) {
-   this.nextDir = dir;
+    this.nextDir = dir;
   }
 
   /** Handle potentially eating a food pellet:
@@ -226,7 +230,7 @@ class Game {
     this.numFood = numFood;
 
     this.timerId = null;
-    this.keyListener= this.keyListener.bind(this);
+    this.keyListener = this.keyListener.bind(this);
   }
 
   /** Start game: add keyboard listener and start timer. */
@@ -254,7 +258,7 @@ class Game {
 
   removeFood(pellet) {
     this.food = this.food.filter(
-        f => f.pt.x !== pellet.pt.x && f.pt.y !== pellet.pt.y);
+      f => f.pt.x !== pellet.pt.x && f.pt.y !== pellet.pt.y);
   }
 
   /** A "tick" of the game: called by interval timer.
@@ -265,13 +269,13 @@ class Game {
    * - refill food, if needed
    */
 
-  tick(crashIntoSelf=false) {
+  tick(crashIntoSelf = false) {
     console.log("tick");
 
     const isDead = this.snake.checkCrashIntoWall();
 
 
-    if (isDead|| crashIntoSelf) {
+    if (isDead || crashIntoSelf) {
       window.clearInterval(this.timerId);
       window.removeEventListener("keydown", this.keyListener);
       return;
@@ -292,24 +296,54 @@ class Game {
   }
 }
 
+class GrowthSnake extends Snake {
+  constructor(keymap, dir, start, color, growthRate) {
+    super(keymap, dir, start, color);
+    this.parts = [start]; // list of Points in snake body     
+    this.nextDir = dir;   // direction we'll start moving on next tick
+    this.growBy = 0; // how many to grow by (goes up after eating)
+    this.crashIntoSelf = false;
+    this.growthRate = growthRate
+  }
+  eats(food) {
+    const head = this.head();
+    const pellet = food.find(f => f.pt.x === head.x && f.pt.y === head.y);
+    console.log("eats pellet=", pellet);
+    if (pellet) this.growBy += this.growthRate;
+    return pellet;
+  }
+}
+
 
 /// Set up snakes, game, and start game
 
 const snake1 = new Snake(
-    {
-      ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
-    },
-    new Point(20, 20),
-    "right",
+  {
+    ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+  },
+  new Point(20, 20),
+  "right",
+  "red",
 );
 
 const snake2 = new Snake(
-    {
-      w: "up", a: "left", s: "right", z: "down",
-    },
-    new Point(10, 10),
-    "right",
+  {
+    w: "up", a: "left", s: "right", z: "down",
+  },
+  new Point(10, 10),
+  "right",
+  "blue",
 );
 
-const game = new Game(snake1);
+const snake3 = new GrowthSnake(
+  {
+    ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+  },
+  "right",
+  new Point(20, 20),
+  "red",
+  5,
+)
+
+const game = new Game(snake3);
 game.start();
