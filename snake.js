@@ -8,7 +8,7 @@ const HEIGHT = 30;
 // translate game board size to pixels
 const SCALE = 20;
 
-const GAME_DELAY_MS = 400;
+const GAME_DELAY_MS = 1000;
 
 
 // One-time setup to HTML canvas element: make it the right size (given settings
@@ -120,7 +120,6 @@ class Snake {
     this.dir = dir;       // direction currently moving
     this.nextDir = dir;   // direction we'll start moving on next tick
     this.growBy = 0; // how many to grow by (goes up after eating)
-    this.crashIntoSelf = false;
     this.color = color;
     //this.checkCrashIntoSelf=this.checkCrashIntoSelf.bind(this);
   }
@@ -134,7 +133,7 @@ class Snake {
   /** Does the snake body contain this Point? t/f */
 
   contains(pt) {
-    return this.parts.some(me => me.x === pt.x && me.y === pt.y);
+    return this.parts.slice(1).some(me => me.x === pt.x && me.y === pt.y);
   }
 
   /** Head (first Point) of the snake. */
@@ -149,9 +148,9 @@ class Snake {
     return (this.head().isOutOfBound());
   }
   // /**  Did the snake crash into itself? t/f */
-  // checkCrashIntoSelf (){
-  //   return this.parts.slice(1).some(me => me.x===this.head.x && me.y===this.head.y);
-  // }
+  checkCrashIntoSelf() {
+    return this.contains(this.head());
+  }
   /** Move snake one move in its current direction. */
 
   move() {
@@ -169,8 +168,8 @@ class Snake {
     if (this.dir === "right") pt = new Point(x + 1, y);
     if (this.dir === "up") pt = new Point(x, y - 1);
     if (this.dir === "down") pt = new Point(x, y + 1);
-
-    if (this.contains(pt)) { game.tick(true) };
+    // seperate function
+    //if (this.checkCrashIntoSelf(pt)) {return true};
 
     this.parts.unshift(pt);
 
@@ -269,13 +268,13 @@ class Game {
    * - refill food, if needed
    */
 
-  tick(crashIntoSelf = false) {
+  tick() {
     console.log("tick");
 
-    const isDead = this.snake.checkCrashIntoWall();
+    const isDead = (this.snake.checkCrashIntoWall() || this.snake.checkCrashIntoSelf());
 
 
-    if (isDead || crashIntoSelf) {
+    if (isDead) {
       window.clearInterval(this.timerId);
       window.removeEventListener("keydown", this.keyListener);
       return;
@@ -297,21 +296,78 @@ class Game {
 }
 
 class GrowthSnake extends Snake {
-  constructor(keymap, dir, start, color, growthRate) {
-    super(keymap, dir, start, color);
-    this.parts = [start]; // list of Points in snake body     
-    this.nextDir = dir;   // direction we'll start moving on next tick
-    this.growBy = 0; // how many to grow by (goes up after eating)
-    this.crashIntoSelf = false;
-    this.growthRate = growthRate
-  }
+  // constructor(keymap, dir, start, color) {
+  //   super(keymap, dir, start, color);
+  //   this.parts = [start]; // list of Points in snake body     
+  //   this.nextDir = dir;   // direction we'll start moving on next tick
+  //   this.growBy = 0; // how many to grow by (goes up after eating)
+  //   this.crashIntoSelf = false;
+  // super(keymap, dir, start, color)
+  // }
+  //just tweak the growth rate
   eats(food) {
     const head = this.head();
     const pellet = food.find(f => f.pt.x === head.x && f.pt.y === head.y);
     console.log("eats pellet=", pellet);
-    if (pellet) this.growBy += this.growthRate;
+    if (pellet) this.growBy += (Math.floor(Math.random() * 10));
     return pellet;
   }
+}
+
+
+
+class noWallSnake extends Snake {
+
+  goingOpposite(currentDir, nextDir) {
+    return ((nextDir === "right" && currentDir === "left") ||
+      (nextDir === "left" && currentDir === "right") ||
+      (nextDir === "up" && currentDir === "down") ||
+      (nextDir === "down" && currentDir === "up"))
+  }
+  move() {
+    const { x, y } = this.head();
+
+    // Calculate where the new head will be, and add that point to front of body
+    let pt;
+    // prevent 180 turn 
+    if (this.goingOpposite(this.nextDir, this.dir)) { this.nextDir = this.dir };
+
+    this.dir = this.nextDir;
+    if (this.dir === "left") pt = new Point(x - 1, y);
+    if (this.dir === "right") pt = new Point(x + 1, y);
+    if (this.dir === "up") pt = new Point(x, y - 1);
+    if (this.dir === "down") pt = new Point(x, y + 1);
+    // seperate function
+    //if (this.checkCrashIntoSelf(pt)) {return true};
+    const directionsObj = {
+      left: [x - 1, y],
+      right: [x + 1, y],
+      up: [x, y - 1],
+      down: [x, y + 1]
+    }
+
+    while (pt.isOutOfBound()) {
+      let newRandomDirection = Object.keys(directionsObj)[(Math.floor(Math.random() * 4))];
+      if (this.goingOpposite(newRandomDirection, this.dir)) {
+        newRandomDirection = Object.keys(directionsObj).filter(dir => dir !== newRandomDirection && dir !== this.dir)[(Math.floor(Math.random() * 2))];
+      }
+      this.dir = newRandomDirection;
+      this.nextdir = this.dir;
+      console.log(this.dir, this.nextdir);
+      pt = new Point(...directionsObj[this.dir]);
+      console.log("pt", pt);
+    }
+
+    this.parts.unshift(pt);
+
+    // If we're not growing (didn't recently eat a pellet), remove the tail of
+    // the snake body, so it moves and doesn't grow. If we're growing, decrement
+    // growth so we're closer to not-growing-any-more.
+    if (this.growBy === 0) this.parts.pop();
+    else this.growBy--;
+  }
+
+
 }
 
 
@@ -339,11 +395,21 @@ const snake3 = new GrowthSnake(
   {
     ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
   },
-  "right",
   new Point(20, 20),
+  "right",
   "red",
-  5,
 )
 
-const game = new Game(snake3);
+
+const snake4 = new noWallSnake(
+  {
+    ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+  },
+  new Point(20, 20),
+  "right",
+  "red",
+)
+
+
+const game = new Game(snake4);
 game.start();
